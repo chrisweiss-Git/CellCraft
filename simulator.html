@@ -2,69 +2,120 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>3D Simulator</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>3D Simulator — Diamond Precision Robot Cell</title>
 <style>
-  body { margin:0; background:#020617; color:#e5e7eb; font-family:Inter }
-  canvas { display:block }
+  body { margin:0; background:#020617; color:#e5e7eb; font-family:Inter; overflow:hidden; }
+  #ui { position:absolute; top:10px; left:10px; z-index:10; }
+  button { margin-right:5px; padding:6px 12px; font-size:14px; }
 </style>
 </head>
 <body>
+
+<div id="ui">
+  <button id="playBtn">Play</button>
+  <button id="pauseBtn">Pause</button>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.159/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.159/examples/js/controls/OrbitControls.js"></script>
 
 <script>
+// ----------------------------
+// 1️⃣ Load layout from localStorage
+// ----------------------------
 const layout = JSON.parse(localStorage.getItem('robotCellLayout'));
 if(!layout){
-  alert('No layout found. Please create one in the 2D planner.');
+  alert('No 2D layout found. Please create one in the 2D planner first.');
 }
 
+// ----------------------------
+// 2️⃣ Three.js Scene Setup
+// ----------------------------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020617);
 
-const camera = new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,0.1,1000);
-camera.position.set(10,15,20);
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(12, 12, 18);
+camera.lookAt(layout.area.w/2, 0, layout.area.d/2);
 
 const renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-const controls = new THREE.OrbitControls(camera,renderer.domElement);
-controls.target.set(6,0,8);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.target.set(layout.area.w/2, 0, layout.area.d/2);
 controls.update();
 
-scene.add(new THREE.HemisphereLight(0xffffff,0x334155,1.2));
-const dir = new THREE.DirectionalLight(0xffffff,0.8);
+// ----------------------------
+// 3️⃣ Lighting
+// ----------------------------
+const hemi = new THREE.HemisphereLight(0xffffff, 0x222222, 1.2);
+scene.add(hemi);
+
+const dir = new THREE.DirectionalLight(0xffffff, 0.8);
 dir.position.set(10,20,10);
 scene.add(dir);
 
-const FT = 0.3048;
-
-// Floor
+// ----------------------------
+// 4️⃣ Floor
+// ----------------------------
+const FT = 0.3048; // 1 foot -> meters
 const floorGeo = new THREE.PlaneGeometry(layout.area.w*FT, layout.area.d*FT);
 const floorMat = new THREE.MeshStandardMaterial({color:0x0f172a});
 const floor = new THREE.Mesh(floorGeo,floorMat);
-floor.rotation.x=-Math.PI/2;
+floor.rotation.x = -Math.PI/2;
 scene.add(floor);
 
-// Items
-layout.items.forEach(it=>{
+// ----------------------------
+// 5️⃣ Create 3D objects from layout items
+// ----------------------------
+const itemMeshes = [];
+layout.items.forEach(it => {
   const geo = new THREE.BoxGeometry(it.w*FT, 1, it.d*FT);
-  const mat = new THREE.MeshStandardMaterial({color:it.color});
-  const mesh = new THREE.Mesh(geo,mat);
-  mesh.position.set(
-    it.x*FT,
-    0.5,
-    it.y*FT
-  );
+  const mat = new THREE.MeshStandardMaterial({color: it.color});
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(it.x*FT + it.w*FT/2, 0.5, it.y*FT + it.d*FT/2); // center box
   scene.add(mesh);
+  itemMeshes.push(mesh);
 });
 
+// ----------------------------
+// 6️⃣ Simple Animation
+// ----------------------------
+let playing = false;
+const playBtn = document.getElementById('playBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+playBtn.onclick = ()=>{ playing=true; };
+pauseBtn.onclick = ()=>{ playing=false; };
+
+let time = 0;
 function animate(){
   requestAnimationFrame(animate);
-  renderer.render(scene,camera);
+  
+  // Example: rotate robots if "playing"
+  if(playing){
+    time += 0.01;
+    itemMeshes.forEach(mesh => {
+      if(mesh.material.color.getHexString() === '22d3ee'){ // robot color
+        mesh.rotation.y = time;
+      }
+    });
+  }
+
+  renderer.render(scene, camera);
 }
 animate();
+
+// ----------------------------
+// 7️⃣ Handle window resize
+// ----------------------------
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
+
 </body>
 </html>
