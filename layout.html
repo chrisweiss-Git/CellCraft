@@ -13,7 +13,6 @@
 
 <header>
   <div class="brand">
-    <div class="logo"></div>
     <h1>Diamond Precision — Robot Cell Designer</h1>
     <span class="badge">MVP Prototype</span>
   </div>
@@ -26,250 +25,123 @@
 </header>
 
 <div class="container">
-
 <h2>2D Layout Planner</h2>
-<p>Drag items to arrange within the cell area. Robot reach rings are shown; items beyond reach turn red.</p>
 
-<div class="flex">
-  <div class="col">
-    <div class="panel">
-      <div class="toolbar">
-        <button class="button" onclick="autoPlace()">Auto-Place</button>
-        <button class="button secondary" onclick="resetLayout()">Reset</button>
-        <span class="badge">Area: <span id="areaLbl"></span></span>
-      </div>
-      <div class="canvas-wrapper">
-        <canvas id="layout" width="900" height="540"></canvas>
-      </div>
-      <div class="small">Tip: Auto-place first, then fine-tune by dragging.</div>
-    </div>
+<div class="panel">
+  <div class="toolbar">
+    <button class="button" onclick="autoPlace()">Auto-Place</button>
+    <button class="button secondary" onclick="resetLayout()">Reset</button>
+    <button class="button" onclick="saveAndOpen3D()">Save → 3D Simulator</button>
+    <span class="badge">Area: <span id="areaLbl">12×16 ft</span></span>
   </div>
-  <div class="col" style="max-width:360px;">
-    <div class="panel">
-      <h3>Items</h3>
-      <table class="table" id="tbl"></table>
-      <hr/>
-      <button class="button" onclick="downloadLayout()">Export Layout JSON</button>
-    </div>
-  </div>
+
+  <canvas id="layout" width="900" height="540"></canvas>
+</div>
+
+<table class="table" id="tbl"></table>
 </div>
 
 <script>
-/* =========================
-   Load configuration
-========================= */
-const cfg = JSON.parse(localStorage.getItem('cellConfig')) || {};
-const robotCount = Math.min(4, Math.max(1, cfg.cell?.robot_count || 1));
-const cncCount   = Math.min(10, Math.max(1, cfg.cell?.cnc_count || 1));
-
-/* =========================
-   Canvas setup
-========================= */
 const canvas = document.getElementById('layout');
 const ctx = canvas.getContext('2d');
-const W = canvas.width, H = canvas.height;
-const scale = 30; // px per ft
+const scale = 30;
 
-const area = {
-  w: cfg.floor?.width_ft || 12,
-  d: cfg.floor?.depth_ft || 16
-};
+const area = { w: 12, d: 16 };
+const robotReachFt = 6;
 
-const robotReachFt = 6.0; // prototype reach ring
+const items = [
+  { id:'robot', name:'Robot', w:3, d:3, x:3, y:8, color:'#22d3ee' },
+  { id:'cnc', name:'CNC', w:6, d:4, x:8, y:8, color:'#60a5fa' },
+  { id:'pallet', name:'Finished Pallet', w:2, d:2, x:4, y:12, color:'#10b981' },
+  { id:'infeed', name:'Raw Infeed', w:2, d:2, x:2, y:12, color:'#a78bfa' },
+  { id:'scrap', name:'Scrap Bin', w:2, d:2, x:10, y:12, color:'#ef4444' }
+];
 
-/* =========================
-   Build dynamic items
-========================= */
-const items = [];
+let dragging=null, offset={x:0,y:0};
 
-// Robots
-for (let i = 0; i < robotCount; i++) {
-  items.push({
-    id: `robot${i}`,
-    type: 'robot',
-    name: `Robot ${i + 1}`,
-    w: 3,
-    d: 3,
-    x: 2,
-    y: 3 + i * 4,
-    color: '#22d3ee'
-  });
-}
-
-// CNCs
-for (let i = 0; i < cncCount; i++) {
-  items.push({
-    id: `cnc${i}`,
-    type: 'cnc',
-    name: `CNC ${i + 1}`,
-    w: 6,
-    d: 4,
-    x: 8,
-    y: 2 + i * 4,
-    color: '#60a5fa'
-  });
-}
-
-// Fixed peripherals
-items.push(
-  { id:'pallet', type:'aux', name:'Finished Pallet', w:2, d:2, x:3, y:area.d-3, color:'#10b981' },
-  { id:'infeed', type:'aux', name:'Raw Infeed', w:2, d:2, x:1, y:area.d-3, color:'#a78bfa' },
-  { id:'scrap',  type:'aux', name:'Scrap Bin', w:2, d:2, x:area.w-3, y:area.d-3, color:'#ef4444' }
-);
-
-/* =========================
-   Interaction state
-========================= */
-let dragging = null;
-let offset = { x:0, y:0 };
-
-/* =========================
-   Rendering
-========================= */
-function draw() {
-  ctx.clearRect(0,0,W,H);
-
-  // Background
-  ctx.fillStyle = '#0b1220';
-  ctx.fillRect(0,0,W,H);
-
-  // Grid
-  ctx.strokeStyle = '#334155';
-  for(let x=0;x<=W;x+=scale){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
-  for(let y=0;y<=H;y+=scale){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-
-  // Border
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(0,0,area.w*scale, area.d*scale);
-  ctx.lineWidth = 1;
-
-  // Robot reach rings
-  items.filter(i=>i.type==='robot').forEach(r=>{
-    ctx.beginPath();
-    ctx.strokeStyle = '#22d3ee55';
-    ctx.lineWidth = 10;
-    ctx.arc(r.x*scale, r.y*scale, robotReachFt*scale, 0, Math.PI*2);
-    ctx.stroke();
-    ctx.lineWidth = 1;
-  });
-
-  // Items
-  items.forEach(it=>{
-    const nearestRobot = nearest(it);
-    const within = !nearestRobot || distance(nearestRobot.x,nearestRobot.y,it.x+it.w/2,it.y+it.d/2) <= robotReachFt;
-
-    ctx.fillStyle = it.color + (within ? '' : 'aa');
-    ctx.fillRect(it.x*scale, it.y*scale, it.w*scale, it.d*scale);
-    ctx.strokeStyle = within ? '#94a3b8' : '#ef4444';
-    ctx.strokeRect(it.x*scale, it.y*scale, it.w*scale, it.d*scale);
-
-    ctx.fillStyle = '#e5e7eb';
-    ctx.font = '12px Inter';
-    ctx.fillText(it.name, it.x*scale+6, it.y*scale+14);
-  });
-}
-
-function nearest(it){
-  if(it.type==='robot') return null;
-  let best=null, bestD=1e9;
-  items.filter(i=>i.type==='robot').forEach(r=>{
-    const d=distance(r.x,r.y,it.x+it.w/2,it.y+it.d/2);
-    if(d<bestD){bestD=d; best=r;}
-  });
-  return best;
-}
-
-function distance(ax,ay,bx,by){ return Math.hypot(ax-bx, ay-by); }
-
-/* =========================
-   Mouse interaction
-========================= */
-function hit(mx,my){
-  for(let i=items.length-1;i>=0;i--){
-    const it=items[i];
-    const x=it.x*scale,y=it.y*scale,w=it.w*scale,d=it.d*scale;
-    if(mx>=x&&mx<=x+w&&my>=y&&my<=y+d) return it;
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='#334155';
+  for(let x=0;x<=area.w*scale;x+=scale){
+    for(let y=0;y<=area.d*scale;y+=scale){
+      ctx.strokeRect(x,y,scale,scale);
+    }
   }
-  return null;
+
+  const robot = items.find(i=>i.id==='robot');
+  ctx.beginPath();
+  ctx.arc(robot.x*scale, robot.y*scale, robotReachFt*scale, 0, Math.PI*2);
+  ctx.strokeStyle='#22d3ee55';
+  ctx.lineWidth=8;
+  ctx.stroke();
+
+  items.forEach(it=>{
+    ctx.fillStyle=it.color;
+    ctx.fillRect(it.x*scale,it.y*scale,it.w*scale,it.d*scale);
+    ctx.strokeStyle='#0f172a';
+    ctx.strokeRect(it.x*scale,it.y*scale,it.w*scale,it.d*scale);
+    ctx.fillStyle='#e5e7eb';
+    ctx.fillText(it.name,it.x*scale+6,it.y*scale+14);
+  });
+
+  saveLayout();
+}
+
+function saveLayout(){
+  localStorage.setItem('robotCellLayout',
+    JSON.stringify({ area, items })
+  );
+}
+
+function updateTable(){
+  const tbl=document.getElementById('tbl');
+  tbl.innerHTML='<tr><th>Item</th><th>X</th><th>Y</th></tr>'+
+    items.map(i=>`<tr><td>${i.name}</td><td>${i.x.toFixed(1)}</td><td>${i.y.toFixed(1)}</td></tr>`).join('');
+  document.getElementById('areaLbl').textContent=`${area.w}×${area.d} ft`;
 }
 
 canvas.addEventListener('mousedown',e=>{
   const r=canvas.getBoundingClientRect();
   const mx=e.clientX-r.left,my=e.clientY-r.top;
-  const h=hit(mx,my);
-  if(h){ dragging=h; offset.x=mx-h.x*scale; offset.y=my-h.y*scale; }
+  items.forEach(it=>{
+    if(mx>=it.x*scale && mx<= (it.x+it.w)*scale &&
+       my>=it.y*scale && my<= (it.y+it.d)*scale){
+      dragging=it;
+      offset.x=mx-it.x*scale;
+      offset.y=my-it.y*scale;
+    }
+  });
 });
+
 window.addEventListener('mouseup',()=>dragging=null);
 window.addEventListener('mousemove',e=>{
   if(!dragging) return;
   const r=canvas.getBoundingClientRect();
-  const mx=e.clientX-r.left,my=e.clientY-r.top;
-  dragging.x=Math.max(0,Math.min(area.w-dragging.w,(mx-offset.x)/scale));
-  dragging.y=Math.max(0,Math.min(area.d-dragging.d,(my-offset.y)/scale));
+  dragging.x=Math.max(0,Math.min(area.w-dragging.w,(e.clientX-r.left-offset.x)/scale));
+  dragging.y=Math.max(0,Math.min(area.d-dragging.d,(e.clientY-r.top-offset.y)/scale));
   draw(); updateTable();
 });
 
-/* =========================
-   Table & controls
-========================= */
-function updateTable(){
-  const tbl=document.getElementById('tbl');
-  tbl.innerHTML='<tr><th>Item</th><th>X</th><th>Y</th><th>Status</th></tr>'+
-    items.map(it=>{
-      const r=nearest(it);
-      const ok=!r||distance(r.x,r.y,it.x+it.w/2,it.y+it.d/2)<=robotReachFt;
-      return `<tr><td>${it.name}</td><td>${it.x.toFixed(1)}</td><td>${it.y.toFixed(1)}</td>
-      <td style="color:${ok?'#10b981':'#ef4444'}">${ok?'OK':'Out of reach'}</td></tr>`;
-    }).join('');
-  document.getElementById('areaLbl').textContent=`${area.w}×${area.d} ft`;
-}
-
 function autoPlace(){
-  let ry=3;
-  items.filter(i=>i.type==='robot').forEach(r=>{ r.x=3; r.y=ry; ry+=4; });
-  let cy=2;
-  items.filter(i=>i.type==='cnc').forEach(c=>{ c.x=8; c.y=cy; cy+=4; });
-  draw(); updateTable(); toast('Auto-placed layout.');
+  items[0].x=4; items[0].y=8;
+  items[1].x=7; items[1].y=7;
+  draw(); updateTable();
 }
 
 function resetLayout(){
-  items.forEach(it=>{
-    it.x=Math.random()*(area.w-it.w);
-    it.y=Math.random()*(area.d-it.d);
+  items.forEach(i=>{
+    i.x=Math.random()*(area.w-i.w);
+    i.y=Math.random()*(area.d-i.d);
   });
   draw(); updateTable();
 }
 
-function downloadLayout(){
-  const blob=new Blob([JSON.stringify({area,items},null,2)],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='data/layout.json';
-  a.click();
+function saveAndOpen3D(){
+  saveLayout();
+  window.location.href='simulator.html';
 }
 
-/* =========================
-   Init
-========================= */
 draw(); updateTable();
 </script>
-
-</div>
-
-<footer>
-  © 2026 Diamond Precision Manufacturing (Saelens Corp) — Prototype generated by M365 Copilot.
-</footer>
-
-<div id="toast" class="toast"></div>
-<script>
-function toast(msg){
-  const t=document.getElementById('toast');
-  t.textContent=msg;
-  t.style.display='block';
-  setTimeout(()=>t.style.display='none',3000);
-}
-</script>
-
 </body>
 </html>
