@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2D Cell Layout</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 20px; background: #f0f2f5; }
+  h1 { text-align: center; margin-bottom: 20px; }
+  canvas { border: 1px solid #333; display: block; margin: 0 auto; background: #fff; }
+</style>
+</head>
+<body>
+
+<h1>2D Cell Layout</h1>
+<canvas id="layoutCanvas" width="800" height="600"></canvas>
+
+<script>
+// ---------- Load Configuration ----------
+let config = localStorage.getItem("cellcraftConfig");
+if (!config) {
+    alert("No configuration found! Please save your Cell Configuration Assumptions first.");
+    config = { Robots: 2, CNC: 2 }; // fallback defaults
+} else {
+    config = JSON.parse(config);
+}
+
+// ---------- Canvas Setup ----------
+const canvas = document.getElementById("layoutCanvas");
+const ctx = canvas.getContext("2d");
+const canvasWidth = canvas.width;
+const canvasHeight = canvas.height;
+
+// ---------- Helper Drawing Functions ----------
+function drawRobot(x, y) {
+    ctx.fillStyle = "blue";
+    ctx.fillRect(x, y, 40, 40);
+    ctx.fillStyle = "#fff";
+    ctx.font = "16px Arial";
+    ctx.fillText("R", x + 15, y + 25);
+}
+
+function drawCNC(x, y) {
+    ctx.fillStyle = "red";
+    ctx.fillRect(x, y, 60, 40);
+    ctx.fillStyle = "#fff";
+    ctx.font = "16px Arial";
+    ctx.fillText("CNC", x + 5, y + 25);
+}
+
+function clearCanvas() {
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+}
+
+// ---------- Generate Layout ----------
+function generateLayout(config) {
+    clearCanvas();
+
+    const robotCount = config.Robots;
+    const cncCount = config.CNC;
+
+    // Arrange robots on top half
+    for (let i = 0; i < robotCount; i++) {
+        let x = 50 + i * 80;
+        let y = 50;
+        drawRobot(x, y);
+    }
+
+    // Arrange CNC machines on bottom half
+    for (let i = 0; i < cncCount; i++) {
+        let x = 50 + i * 100;
+        let y = 300;
+        drawCNC(x, y);
+    }
+}
+
+// ---------- Initialize ----------
+generateLayout(config);
+</script>
+
+</body>
+</html>
+
