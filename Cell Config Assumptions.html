@@ -37,10 +37,13 @@ function saveConfig() {
 
     const config = { Robots: robots, CNC: cnc };
 
-    // Save to localStorage so layout.html can access it
+    // Save to localStorage
     localStorage.setItem("cellcraftConfig", JSON.stringify(config));
 
-    alert("Configuration saved! Now go to the 2D layout page.");
+    // Trigger storage event manually for same tab
+    window.dispatchEvent(new Event('storage'));
+
+    alert("Configuration saved! Open the 2D layout to see changes automatically.");
 }
 </script>
 
