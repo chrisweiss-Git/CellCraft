@@ -2,164 +2,69 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>3D Simulator — Diamond Precision Robot Cell</title>
-<link rel="stylesheet" href="styles.css" />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<title>3D Simulator</title>
+<style>
+  body { margin:0; background:#020617; color:#e5e7eb; font-family:Inter }
+  canvas { display:block }
+</style>
 </head>
 <body>
-<header>
-  <div class="brand">
-    <div class="logo"></div>
-    <h1>Diamond Precision — Robot Cell Designer</h1>
-    <span class="badge">MVP Prototype</span>
-  </div>
-  <nav>
-      <a href="index.html" >Overview</a>
-      <a href="wizard.html" >Cell Wizard</a>
-      <a href="layout.html" >2D Layout</a>
-      <a href="simulator.html" class="active">3D Simulator</a>
-    </nav>
-</header>
-<div class="container">
 
-<h2>3D Simulator</h2>
-<p>Play a simplified animation of the robot servicing CNC → blow‑off → camera → good/scrap. Use the controls to play/pause and adjust speed.</p>
-<div class="panel">
-  <div class="toolbar">
-    <button class="button" id="playBtn">▶ Play</button>
-    <button class="button secondary" id="pauseBtn">⏸ Pause</button>
-    <label style="margin-left:12px;">Speed</label>
-    <input type="range" min="0.25" max="3" value="1" step="0.25" id="speed" style="width:200px;">
-    <span class="badge" id="timeLbl">t = 0.0s</span>
-  </div>
-  <div class="canvas-wrapper" id="threewrap"></div>
-</div>
-<div class="small">Robot and devices are abstracted for demo purposes. Production will use accurate kinematics and collision meshes.</div>
-<script type="module">
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
-import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+<script src="https://cdn.jsdelivr.net/npm/three@0.159/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.159/examples/js/controls/OrbitControls.js"></script>
 
-const wrap = document.getElementById('threewrap');
-const W = wrap.clientWidth; const H = 540;
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b1220);
-const camera = new THREE.PerspectiveCamera(50, W/H, 0.1, 100);
-camera.position.set(6,6,8);
-const renderer = new THREE.WebGLRenderer({antialias:true}); renderer.setSize(W,H); wrap.appendChild(renderer.domElement);
-const controls = new OrbitControls(camera, renderer.domElement); controls.target.set(6,0,8); controls.update();
-
-// lights
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(3,6,2); scene.add(dir);
-
-// floor grid
-const grid = new THREE.GridHelper(24, 24, 0x334155, 0x1f2937); grid.position.y = -0.01; scene.add(grid);
-
-// helpers
-function makeBox(w,h,d,color){ const g=new THREE.BoxGeometry(w,h,d); const m=new THREE.MeshStandardMaterial({color}); const mesh=new THREE.Mesh(g,m); return mesh; }
-
-// Devices (units in feet approximated)
-const robotBase = makeBox(1,0.4,1,0x22d3ee); robotBase.position.set(4,0.2,8); scene.add(robotBase);
-const cnc = makeBox(6,4,4,0x60a5fa); cnc.position.set(10,2,8); scene.add(cnc);
-const pallet = makeBox(2,0.5,2,0x10b981); pallet.position.set(4,0.25,14); scene.add(pallet);
-const infeed = makeBox(2,0.5,2,0xa78bfa); infeed.position.set(2,0.25,14); scene.add(infeed);
-const blow = makeBox(2,1,2,0xf59e0b); blow.position.set(6,0.5,4); scene.add(blow);
-const cameraBox = makeBox(2,1.2,2,0xf472b6); cameraBox.position.set(10,0.6,4); scene.add(cameraBox);
-const scrap = makeBox(2,1,2,0xef4444); scrap.position.set(14,0.5,14); scene.add(scrap);
-
-// Simple 3-link arm (abstract robot)
-const link1 = makeBox(0.5,2.5,0.5,0x22d3ee); link1.position.set(4,1.25,8); scene.add(link1);
-const joint1 = new THREE.Group(); joint1.position.copy(link1.position); scene.add(joint1); joint1.add(link1);
-const link2 = makeBox(0.4,2.0,0.4,0x38bdf8); link2.position.set(4,3.25,8); joint1.add(link2);
-const joint2 = new THREE.Group(); joint2.position.set(0,2.25,0); link1.add(joint2); joint2.add(link2);
-const link3 = makeBox(0.3,1.5,0.3,0x7dd3fc); link3.position.set(4,4.75,8); link2.add(link3);
-const joint3 = new THREE.Group(); joint3.position.set(0,2.0,0); link2.add(joint3); joint3.add(link3);
-const tcp = makeBox(0.2,0.2,0.2,0xffffff); tcp.position.set(4,5.5,8); link3.add(tcp);
-
-// Part being handled
-const part = makeBox(0.5,0.3,0.5,0x999999); part.visible=false; scene.add(part);
-
-// Waypoints (very simplified TCP poses)
-const pts = [
-  {name:'RAW_PICK', p:new THREE.Vector3(infeed.position.x, 0.5, infeed.position.z)},
-  {name:'CNC_LOAD', p:new THREE.Vector3(cnc.position.x-3, 1.0, cnc.position.z)},
-  {name:'BLOW',     p:new THREE.Vector3(blow.position.x, 1.0, blow.position.z)},
-  {name:'VISION',   p:new THREE.Vector3(cameraBox.position.x, 1.2, cameraBox.position.z)},
-  {name:'GOOD',     p:new THREE.Vector3(pallet.position.x, 0.8, pallet.position.z)},
-  {name:'SCRAP',    p:new THREE.Vector3(scrap.position.x, 0.8, scrap.position.z)}
-];
-
-// Sequence timeline (seconds and actions)
-const seq = [
-  {to:'RAW_PICK', t:0, hold:0.8, grab:true},
-  {to:'CNC_LOAD', t:2.0, hold:0.9},
-  {to:'BLOW', t:4.4, hold:1.0},
-  {to:'VISION', t:6.2, hold:0.8},
-  // branch: assume pass (80%); in demo we always go GOOD
-  {to:'GOOD', t:7.6, hold:0.8, release:true}
-];
-
-let t = 0; let playing = false; let speed = 1.0; let dur = 9.0;
-const timeLbl = document.getElementById('timeLbl');
-
-function interp(a,b,u){ return a.clone().multiplyScalar(1-u).add(b.clone().multiplyScalar(u)); }
-function lerp(a,b,u){ return a+(b-a)*u; }
-
-function poseAtTime(t){
-  // find surrounding keyframes
-  let i=0; for(; i<seq.length-1; i++){ if(t < seq[i+1].t) break; }
-  const a = seq[i]; const b = seq[Math.min(i+1, seq.length-1)];
-  const pa = pts.find(p=>p.name===a.to).p; const pb = pts.find(p=>p.name===b.to).p;
-  const u = Math.min(1, Math.max(0, (t - a.t) / Math.max(0.0001, (b.t - a.t))));
-  return interp(pa,pb,u);
+<script>
+const layout = JSON.parse(localStorage.getItem('robotCellLayout'));
+if(!layout){
+  alert('No layout found. Please create one in the 2D planner.');
 }
 
-function updateArm(target){
-  // super simplified: aim links roughly towards target by rotating joints
-  const base = robotBase.position.clone(); base.y = 0.2;
-  // direct set tcp position
-  tcp.getWorldPosition(tmpV);
-  // tween link rotations towards target direction
-  const dir = target.clone().sub(joint1.getWorldPosition(new THREE.Vector3()));
-  joint1.rotation.y = Math.atan2(dir.x, dir.z);
-  joint2.rotation.z = THREE.MathUtils.clamp((target.y-1.0)*0.2, -1.0, 1.0);
-  joint3.rotation.z = THREE.MathUtils.clamp((target.y-1.5)*0.3, -1.2, 1.2);
-}
-const tmpV = new THREE.Vector3();
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x020617);
+
+const camera = new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,0.1,1000);
+camera.position.set(10,15,20);
+
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera,renderer.domElement);
+controls.target.set(6,0,8);
+controls.update();
+
+scene.add(new THREE.HemisphereLight(0xffffff,0x334155,1.2));
+const dir = new THREE.DirectionalLight(0xffffff,0.8);
+dir.position.set(10,20,10);
+scene.add(dir);
+
+const FT = 0.3048;
+
+// Floor
+const floorGeo = new THREE.PlaneGeometry(layout.area.w*FT, layout.area.d*FT);
+const floorMat = new THREE.MeshStandardMaterial({color:0x0f172a});
+const floor = new THREE.Mesh(floorGeo,floorMat);
+floor.rotation.x=-Math.PI/2;
+scene.add(floor);
+
+// Items
+layout.items.forEach(it=>{
+  const geo = new THREE.BoxGeometry(it.w*FT, 1, it.d*FT);
+  const mat = new THREE.MeshStandardMaterial({color:it.color});
+  const mesh = new THREE.Mesh(geo,mat);
+  mesh.position.set(
+    it.x*FT,
+    0.5,
+    it.y*FT
+  );
+  scene.add(mesh);
+});
 
 function animate(){
   requestAnimationFrame(animate);
-  if(playing){ t += 0.016 * speed; if(t>dur){ t=0; }
-    const target = poseAtTime(t);
-    updateArm(target);
-    // move part with TCP if grabbed
-    const step = seq.findLast(s => t>=s.t) || seq[0];
-    const grabbing = step.grab || (step.release? false : (part.visible));
-    if(step.grab){ part.visible = true; }
-    if(step.release){ part.visible = false; }
-    if(part.visible){ part.position.copy(target.clone().add(new THREE.Vector3(0,-0.2,0))); }
-    timeLbl.textContent = `t = ${t.toFixed(1)}s`;
-  }
-  renderer.render(scene, camera);
+  renderer.render(scene,camera);
 }
 animate();
-
-// controls
-const playBtn = document.getElementById('playBtn');
-const pauseBtn = document.getElementById('pauseBtn');
-const speedEl = document.getElementById('speed');
-playBtn.onclick = ()=>{ playing=true; toast('Playing simulation'); };
-pauseBtn.onclick = ()=>{ playing=false; toast('Paused'); };
-speedEl.oninput = (e)=>{ speed = parseFloat(e.target.value); };
 </script>
-
-</div>
-<footer>
-  © 2026 Diamond Precision Manufacturing (Saelens Corp) — Prototype generated by M365 Copilot.
-</footer>
-<div id="toast" class="toast"></div>
-<script>function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000);}</script>
 </body>
 </html>
