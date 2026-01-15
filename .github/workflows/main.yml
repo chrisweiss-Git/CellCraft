@@ -1,0 +1,4 @@
+cd "C:\Users\Chris.Weiss\OneDrive\Project Veteran\AI\diamond-robot-cell-prototype"
+git add .github/workflows/deploy.yml
+git commit -m "Add GitHub Actions deploy workflow
+git push
