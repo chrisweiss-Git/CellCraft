@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Cell Wizard — Diamond Precision Robot Cell</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <h1>Diamond Precision — Robot Cell Designer</h1>
+    <span class="badge">MVP Prototype</span>
+  </div>
+  <nav>
+      <a href="index.html" >Overview</a>
+      <a href="wizard.html" class="active">Cell Wizard</a>
+      <a href="layout.html" >2D Layout</a>
+      <a href="simulator.html" >3D Simulator</a>
+    </nav>
+</header>
+<div class="container">
+
+<h2>Cell Config Wizard</h2>
+<p>Enter or confirm assumptions. Click <strong>Save</strong> to store as <code>data/sample_cell_config.json</code>, then proceed to Layout or Simulator.</p>
+<div class="grid">
+  <div class="card" style="grid-column: span 6;">
+    <h3>1) Robot</h3>
+    <label>Brand/Model</label>
+    <input id="robot_model" value="FANUC M-20iA" />
+    <div class="flex"><div class="col">
+      <label>Reach (mm)</label>
+      <input id="robot_reach" type="number" value="1811" />
+    </div><div class="col">
+      <label>Payload (kg)</label>
+      <input id="robot_payload" type="number" value="20" />
+    </div></div>
+    <label>Controller</label>
+    <input id="controller" value="R-30iB Plus" />
+  </div>
+  <div class="card" style="grid-column: span 6;">
+    <h3>2) CNC Machine</h3>
+    <label>Make/Model</label>
+    <input id="cnc_model" value="HAAS VF-2" />
+    <label>Interface</label>
+    <select id="cnc_iface"><option>Discrete I/O</option><option>MTConnect</option><option>OPC UA</option></select>
+    <div class="flex"><div class="col">
+      <label>Door width (mm)</label>
+      <input id="door_w" type="number" value="900" />
+    </div><div class="col">
+      <label>Door height (mm)</label>
+      <input id="door_h" type="number" value="700" />
+    </div></div>
+  </div>
+  <div class="card" style="grid-column: span 6;">
+    <h3>3) Vision</h3>
+    <label>Brand/Model</label>
+    <input id="vision_model" value="Cognex In-Sight 7000" />
+    <label>Trigger</label>
+    <select id="vision_trig"><option>Digital IO</option><option>Ethernet/IP</option></select>
+  </div>
+  <div class="card" style="grid-column: span 6;">
+    <h3>4) Part & Takt</h3>
+    <div class="flex"><div class="col"><label>Length (mm)</label><input id="p_l" type="number" value="152"/></div>
+    <div class="col"><label>Width (mm)</label><input id="p_w" type="number" value="152"/></div>
+    <div class="col"><label>Height (mm)</label><input id="p_h" type="number" value="51"/></div></div>
+    <div class="flex"><div class="col"><label>Weight (kg)</label><input id="p_mass" type="number" value="2.3"/></div>
+    <div class="col"><label>Takt target (s)</label><input id="takt" type="number" value="90"/></div></div>
+  </div>
+  <div class="card" style="grid-column: span 6;">
+    <h3>5) Floor Constraints</h3>
+    <div class="flex"><div class="col"><label>Width (ft)</label><input id="area_w" type="number" value="12"/></div>
+    <div class="col"><label>Depth (ft)</label><input id="area_d" type="number" value="16"/></div>
+    <div class="col"><label>Clearance (ft)</label><input id="clearance" type="number" value="3"/></div></div>
+  </div>
+  <div class="card" style="grid-column: span 6;">
+    <h3>6) Export Preference</h3>
+    <label>Robot Program Export</label>
+    <select id="export_pref"><option>FANUC (.LS/.TP template)</option><option>ABB RAPID</option><option>KUKA KRL</option><option>URScript</option><option>RoboDK Project</option></select>
+    <label>Include IO Map</label>
+    <select id="iomap"><option>Yes</option><option>No</option></select>
+  </div>
+</div>
+<div class="flex" style="margin-top:12px;">
+  <button class="button" onclick="saveConfig()">Save Config</button>
+  <button class="button secondary" onclick="location.href='layout.html'">Go to 2D Layout</button>
+  <button class="button secondary" onclick="location.href='simulator.html'">Go to 3D Simulator</button>
+</div>
+<script>
+function saveConfig(){
+  const cfg = {
+    robot: { model: robot_model.value, reach_mm: +robot_reach.value, payload_kg: +robot_payload.value, controller: controller.value },
+    cnc: { model: cnc_model.value, interface: cnc_iface.value, door_w_mm: +door_w.value, door_h_mm: +door_h.value },
+    vision: { model: vision_model.value, trigger: vision_trig.value },
+    part: { L_mm:+p_l.value, W_mm:+p_w.value, H_mm:+p_h.value, mass_kg:+p_mass.value },
+    takt_s: +takt.value,
+    floor: { width_ft:+area_w.value, depth_ft:+area_d.value, clearance_ft:+clearance.value },
+    export: { preference: export_pref.value, io_map: iomap.value==='Yes' }
+  };
+  const blob = new Blob([JSON.stringify(cfg,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'data/sample_cell_config.json';
+  a.click();
+  toast('Config saved (downloaded). Place it into /data to persist.');
+}
+</script>
+
+</div>
+<footer>
+  © 2026 Diamond Precision Manufacturing (Saelens Corp) — Prototype generated by M365 Copilot.
+</footer>
+<div id="toast" class="toast"></div>
+<script>function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000);}</script>
+</body>
+</html>

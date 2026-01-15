@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>2D Layout — Diamond Precision Robot Cell</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <h1>Diamond Precision — Robot Cell Designer</h1>
+    <span class="badge">MVP Prototype</span>
+  </div>
+  <nav>
+      <a href="index.html" >Overview</a>
+      <a href="wizard.html" >Cell Wizard</a>
+      <a href="layout.html" class="active">2D Layout</a>
+      <a href="simulator.html" >3D Simulator</a>
+    </nav>
+</header>
+<div class="container">
+
+<h2>2D Layout Planner</h2>
+<p>Drag items to arrange within the cell area. Click <strong>Auto‑Place</strong> to get a compact layout. The robot's reach ring (green) is shown; items beyond reach turn red.</p>
+<div class="flex">
+  <div class="col">
+    <div class="panel">
+      <div class="toolbar">
+        <button class="button" onclick="autoPlace()">Auto‑Place</button>
+        <button class="button secondary" onclick="resetLayout()">Reset</button>
+        <span class="badge">Area: <span id="areaLbl">12×16 ft</span></span>
+      </div>
+      <div class="canvas-wrapper">
+        <canvas id="layout" width="900" height="540"></canvas>
+      </div>
+      <div class="small">Tip: Use <code>Auto‑Place</code> then fine‑tune by dragging. Exported waypoints are placeholders.</div>
+    </div>
+  </div>
+  <div class="col" style="max-width:360px;">
+    <div class="panel">
+      <h3>Items</h3>
+      <table class="table" id="tbl"></table>
+      <hr/>
+      <button class="button" onclick="downloadLayout()">Export Layout JSON</button>
+    </div>
+  </div>
+</div>
+<script>
+const canvas = document.getElementById('layout');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+let scale = 30; // px per ft
+let area = {w:12, d:16};
+let robotReachFt = 1811/304.8/12*12; // naive; we'll just use 6 ft reach circle for prototype
+robotReachFt = 6.0; // override simple reach visual
+
+const items = [
+  {id:'robot', name:'Robot (FANUC M-20iA)', w:3, d:3, x:3, y:8, color:'#22d3ee'},
+  {id:'cnc', name:'CNC (HAAS VF-2)', w:6, d:4, x:8, y:8, color:'#60a5fa'},
+  {id:'pallet', name:'Finished Pallet', w:2, d:2, x:4, y:12, color:'#10b981'},
+  {id:'infeed', name:'Raw Infeed', w:2, d:2, x:2, y:12, color:'#a78bfa'},
+  {id:'blow', name:'Blow-off', w:2, d:2, x:6, y:4, color:'#f59e0b'},
+  {id:'camera', name:'Camera Box', w:2, d:2, x:10, y:4, color:'#f472b6'},
+  {id:'scrap', name:'Scrap Bin', w:2, d:2, x:12, y:12, color:'#ef4444'}
+];
+
+let dragging = null; let offset={x:0,y:0};
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // area
+  ctx.fillStyle = '#0b1220'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle = '#334155';
+  for(let x=0;x<=W;x+=scale){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0;y<=H;y+=scale){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  // border
+  ctx.strokeStyle = '#475569'; ctx.lineWidth = 2; ctx.strokeRect(0,0,area.w*scale, area.d*scale);
+  // robot reach ring
+  const robot = items.find(i=>i.id==='robot');
+  const rx = robot.x*scale, ry = robot.y*scale;
+  ctx.beginPath(); ctx.strokeStyle='#22d3ee55'; ctx.lineWidth=10; ctx.arc(rx, ry, robotReachFt*scale, 0, Math.PI*2); ctx.stroke();
+  ctx.lineWidth=1;
+  // items
+  items.forEach(it=>{
+    const within = distance(robot.x,robot.y, it.x+it.w/2, it.y+it.d/2) <= robotReachFt;
+    ctx.fillStyle = it.color + (within? '':'aa');
+    ctx.fillRect(it.x*scale, it.y*scale, it.w*scale, it.d*scale);
+    ctx.strokeStyle = within? '#94a3b8':'#ef4444'; ctx.strokeRect(it.x*scale, it.y*scale, it.w*scale, it.d*scale);
+    ctx.fillStyle = '#e5e7eb'; ctx.font = '12px Inter';
+    ctx.fillText(it.name, it.x*scale+6, it.y*scale+14);
+  });
+}
+function distance(ax,ay,bx,by){ const dx=ax-bx, dy=ay-by; return Math.hypot(dx,dy); }
+function hit(mx,my){
+  for(let i=items.length-1;i>=0;i--){ const it=items[i];
+    const x=it.x*scale,y=it.y*scale,w=it.w*scale,d=it.d*scale;
+    if(mx>=x && mx<=x+w && my>=y && my<=y+d) return it;
+  } return null;
+}
+canvas.addEventListener('mousedown', e=>{
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const h = hit(mx,my); if(h){ dragging=h; offset.x = mx - h.x*scale; offset.y = my - h.y*scale; }
+});
+window.addEventListener('mouseup', ()=> dragging=null);
+window.addEventListener('mousemove', e=>{
+  if(!dragging) return; const rect=canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  dragging.x = Math.max(0, Math.min(area.w - dragging.w, (mx - offset.x)/scale));
+  dragging.y = Math.max(0, Math.min(area.d - dragging.d, (my - offset.y)/scale));
+  draw(); updateTable();
+});
+
+function updateTable(){
+  const tbl = document.getElementById('tbl');
+  tbl.innerHTML = '<tr><th>Item</th><th>X (ft)</th><th>Y (ft)</th><th>Reach</th></tr>' +
+    items.map(it=>{
+      const robot = items.find(i=>i.id==='robot');
+      const cx = it.x + it.w/2, cy = it.y + it.d/2;
+      const dist = distance(robot.x, robot.y, cx, cy);
+      const within = dist <= robotReachFt;
+      return `<tr><td>${it.name}</td><td>${it.x.toFixed(1)}</td><td>${it.y.toFixed(1)}</td><td style="color:${within?'#10b981':'#ef4444'}">${within?'OK':'Out of reach'}</td></tr>`;
+    }).join('');
+  document.getElementById('areaLbl').textContent = `${area.w}×${area.d} ft`;
+}
+
+function autoPlace(){
+  // simple heuristic: robot near center-left, cnc to right, others around
+  items.find(i=>i.id==='robot').x = 4; items.find(i=>i.id==='robot').y = area.d/2-1.5;
+  items.find(i=>i.id==='cnc').x = 8; items.find(i=>i.id==='cnc').y = area.d/2-2;
+  items.find(i=>i.id==='pallet').x = 3; items.find(i=>i.id==='pallet').y = area.d-2.5;
+  items.find(i=>i.id==='infeed').x = 1; items.find(i=>i.id==='infeed').y = area.d-2.5;
+  items.find(i=>i.id==='blow').x = 6; items.find(i=>i.id==='blow').y = 2;
+  items.find(i=>i.id==='camera').x = 10; items.find(i=>i.id==='camera').y = 2;
+  items.find(i=>i.id==='scrap').x = area.w-2.5; items.find(i=>i.id==='scrap').y = area.d-2.5;
+  draw(); updateTable(); toast('Auto‑placed layout.');
+}
+function resetLayout(){ items.forEach(it=>{ it.x=Math.random()*(area.w-it.w); it.y=Math.random()*(area.d-it.d); }); draw(); updateTable(); }
+function downloadLayout(){
+  const payload = { area, items };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='data/layout.json'; a.click();
+}
+
+draw(); updateTable();
+</script>
+
+</div>
+<footer>
+  © 2026 Diamond Precision Manufacturing (Saelens Corp) — Prototype generated by M365 Copilot.
+</footer>
+<div id="toast" class="toast"></div>
+<script>function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000);}</script>
+</body>
+</html>

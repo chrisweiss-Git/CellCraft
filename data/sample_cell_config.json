@@ -1,0 +1,34 @@
+{
+  "robot": {
+    "model": "FANUC M-20iA",
+    "reach_mm": 1811,
+    "payload_kg": 20,
+    "controller": "R-30iB Plus"
+  },
+  "cnc": {
+    "model": "HAAS VF-2",
+    "interface": "Discrete I/O",
+    "door_w_mm": 900,
+    "door_h_mm": 700
+  },
+  "vision": {
+    "model": "Cognex In-Sight 7000",
+    "trigger": "Digital IO"
+  },
+  "part": {
+    "L_mm": 152,
+    "W_mm": 152,
+    "H_mm": 51,
+    "mass_kg": 2.3
+  },
+  "takt_s": 90,
+  "floor": {
+    "width_ft": 12,
+    "depth_ft": 16,
+    "clearance_ft": 3
+  },
+  "export": {
+    "preference": "FANUC (.LS/.TP template)",
+    "io_map": true
+  }
+}
