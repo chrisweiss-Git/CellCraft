@@ -16,15 +16,6 @@
 <canvas id="layoutCanvas" width="800" height="600"></canvas>
 
 <script>
-// ---------- Load Configuration ----------
-let config = localStorage.getItem("cellcraftConfig");
-if (!config) {
-    alert("No configuration found! Please save your Cell Configuration Assumptions first.");
-    config = { Robots: 2, CNC: 2 }; // fallback defaults
-} else {
-    config = JSON.parse(config);
-}
-
 // ---------- Canvas Setup ----------
 const canvas = document.getElementById("layoutCanvas");
 const ctx = canvas.getContext("2d");
@@ -74,8 +65,26 @@ function generateLayout(config) {
     }
 }
 
+// ---------- Load initial config ----------
+function loadConfig() {
+    let config = localStorage.getItem("cellcraftConfig");
+    if (!config) {
+        config = { Robots: 2, CNC: 2 }; // fallback defaults
+    } else {
+        config = JSON.parse(config);
+    }
+    generateLayout(config);
+}
+
+// ---------- Listen for changes in localStorage ----------
+window.addEventListener('storage', function(event) {
+    if (event.key === 'cellcraftConfig' || event.key === null) {
+        loadConfig();
+    }
+});
+
 // ---------- Initialize ----------
-generateLayout(config);
+loadConfig();
 </script>
 
 </body>
