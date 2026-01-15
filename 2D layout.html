@@ -1,92 +1,275 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>2D Cell Layout</title>
-<style>
-  body { font-family: Arial, sans-serif; padding: 20px; background: #f0f2f5; }
-  h1 { text-align: center; margin-bottom: 20px; }
-  canvas { border: 1px solid #333; display: block; margin: 0 auto; background: #fff; }
-</style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>2D Layout — Diamond Precision Robot Cell</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
-<h1>2D Cell Layout</h1>
-<canvas id="layoutCanvas" width="800" height="600"></canvas>
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <h1>Diamond Precision — Robot Cell Designer</h1>
+    <span class="badge">MVP Prototype</span>
+  </div>
+  <nav>
+    <a href="index.html">Overview</a>
+    <a href="wizard.html">Cell Wizard</a>
+    <a href="layout.html" class="active">2D Layout</a>
+    <a href="simulator.html">3D Simulator</a>
+  </nav>
+</header>
+
+<div class="container">
+
+<h2>2D Layout Planner</h2>
+<p>Drag items to arrange within the cell area. Robot reach rings are shown; items beyond reach turn red.</p>
+
+<div class="flex">
+  <div class="col">
+    <div class="panel">
+      <div class="toolbar">
+        <button class="button" onclick="autoPlace()">Auto-Place</button>
+        <button class="button secondary" onclick="resetLayout()">Reset</button>
+        <span class="badge">Area: <span id="areaLbl"></span></span>
+      </div>
+      <div class="canvas-wrapper">
+        <canvas id="layout" width="900" height="540"></canvas>
+      </div>
+      <div class="small">Tip: Auto-place first, then fine-tune by dragging.</div>
+    </div>
+  </div>
+  <div class="col" style="max-width:360px;">
+    <div class="panel">
+      <h3>Items</h3>
+      <table class="table" id="tbl"></table>
+      <hr/>
+      <button class="button" onclick="downloadLayout()">Export Layout JSON</button>
+    </div>
+  </div>
+</div>
 
 <script>
-// ---------- Canvas Setup ----------
-const canvas = document.getElementById("layoutCanvas");
-const ctx = canvas.getContext("2d");
-const canvasWidth = canvas.width;
-const canvasHeight = canvas.height;
+/* =========================
+   Load configuration
+========================= */
+const cfg = JSON.parse(localStorage.getItem('cellConfig')) || {};
+const robotCount = Math.min(4, Math.max(1, cfg.cell?.robot_count || 1));
+const cncCount   = Math.min(10, Math.max(1, cfg.cell?.cnc_count || 1));
 
-// ---------- Helper Drawing Functions ----------
-function drawRobot(x, y) {
-    ctx.fillStyle = "blue";
-    ctx.fillRect(x, y, 40, 40);
-    ctx.fillStyle = "#fff";
-    ctx.font = "16px Arial";
-    ctx.fillText("R", x + 15, y + 25);
+/* =========================
+   Canvas setup
+========================= */
+const canvas = document.getElementById('layout');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+const scale = 30; // px per ft
+
+const area = {
+  w: cfg.floor?.width_ft || 12,
+  d: cfg.floor?.depth_ft || 16
+};
+
+const robotReachFt = 6.0; // prototype reach ring
+
+/* =========================
+   Build dynamic items
+========================= */
+const items = [];
+
+// Robots
+for (let i = 0; i < robotCount; i++) {
+  items.push({
+    id: `robot${i}`,
+    type: 'robot',
+    name: `Robot ${i + 1}`,
+    w: 3,
+    d: 3,
+    x: 2,
+    y: 3 + i * 4,
+    color: '#22d3ee'
+  });
 }
 
-function drawCNC(x, y) {
-    ctx.fillStyle = "red";
-    ctx.fillRect(x, y, 60, 40);
-    ctx.fillStyle = "#fff";
-    ctx.font = "16px Arial";
-    ctx.fillText("CNC", x + 5, y + 25);
+// CNCs
+for (let i = 0; i < cncCount; i++) {
+  items.push({
+    id: `cnc${i}`,
+    type: 'cnc',
+    name: `CNC ${i + 1}`,
+    w: 6,
+    d: 4,
+    x: 8,
+    y: 2 + i * 4,
+    color: '#60a5fa'
+  });
 }
 
-function clearCanvas() {
-    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+// Fixed peripherals
+items.push(
+  { id:'pallet', type:'aux', name:'Finished Pallet', w:2, d:2, x:3, y:area.d-3, color:'#10b981' },
+  { id:'infeed', type:'aux', name:'Raw Infeed', w:2, d:2, x:1, y:area.d-3, color:'#a78bfa' },
+  { id:'scrap',  type:'aux', name:'Scrap Bin', w:2, d:2, x:area.w-3, y:area.d-3, color:'#ef4444' }
+);
+
+/* =========================
+   Interaction state
+========================= */
+let dragging = null;
+let offset = { x:0, y:0 };
+
+/* =========================
+   Rendering
+========================= */
+function draw() {
+  ctx.clearRect(0,0,W,H);
+
+  // Background
+  ctx.fillStyle = '#0b1220';
+  ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle = '#334155';
+  for(let x=0;x<=W;x+=scale){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=0;y<=H;y+=scale){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // Border
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0,0,area.w*scale, area.d*scale);
+  ctx.lineWidth = 1;
+
+  // Robot reach rings
+  items.filter(i=>i.type==='robot').forEach(r=>{
+    ctx.beginPath();
+    ctx.strokeStyle = '#22d3ee55';
+    ctx.lineWidth = 10;
+    ctx.arc(r.x*scale, r.y*scale, robotReachFt*scale, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  });
+
+  // Items
+  items.forEach(it=>{
+    const nearestRobot = nearest(it);
+    const within = !nearestRobot || distance(nearestRobot.x,nearestRobot.y,it.x+it.w/2,it.y+it.d/2) <= robotReachFt;
+
+    ctx.fillStyle = it.color + (within ? '' : 'aa');
+    ctx.fillRect(it.x*scale, it.y*scale, it.w*scale, it.d*scale);
+    ctx.strokeStyle = within ? '#94a3b8' : '#ef4444';
+    ctx.strokeRect(it.x*scale, it.y*scale, it.w*scale, it.d*scale);
+
+    ctx.fillStyle = '#e5e7eb';
+    ctx.font = '12px Inter';
+    ctx.fillText(it.name, it.x*scale+6, it.y*scale+14);
+  });
 }
 
-// ---------- Generate Layout ----------
-function generateLayout(config) {
-    clearCanvas();
-
-    const robotCount = config.Robots;
-    const cncCount = config.CNC;
-
-    // Arrange robots on top half
-    for (let i = 0; i < robotCount; i++) {
-        let x = 50 + i * 80;
-        let y = 50;
-        drawRobot(x, y);
-    }
-
-    // Arrange CNC machines on bottom half
-    for (let i = 0; i < cncCount; i++) {
-        let x = 50 + i * 100;
-        let y = 300;
-        drawCNC(x, y);
-    }
+function nearest(it){
+  if(it.type==='robot') return null;
+  let best=null, bestD=1e9;
+  items.filter(i=>i.type==='robot').forEach(r=>{
+    const d=distance(r.x,r.y,it.x+it.w/2,it.y+it.d/2);
+    if(d<bestD){bestD=d; best=r;}
+  });
+  return best;
 }
 
-// ---------- Load initial config ----------
-function loadConfig() {
-    let config = localStorage.getItem("cellcraftConfig");
-    if (!config) {
-        config = { Robots: 2, CNC: 2 }; // fallback defaults
-    } else {
-        config = JSON.parse(config);
-    }
-    generateLayout(config);
+function distance(ax,ay,bx,by){ return Math.hypot(ax-bx, ay-by); }
+
+/* =========================
+   Mouse interaction
+========================= */
+function hit(mx,my){
+  for(let i=items.length-1;i>=0;i--){
+    const it=items[i];
+    const x=it.x*scale,y=it.y*scale,w=it.w*scale,d=it.d*scale;
+    if(mx>=x&&mx<=x+w&&my>=y&&my<=y+d) return it;
+  }
+  return null;
 }
 
-// ---------- Listen for changes in localStorage ----------
-window.addEventListener('storage', function(event) {
-    if (event.key === 'cellcraftConfig' || event.key === null) {
-        loadConfig();
-    }
+canvas.addEventListener('mousedown',e=>{
+  const r=canvas.getBoundingClientRect();
+  const mx=e.clientX-r.left,my=e.clientY-r.top;
+  const h=hit(mx,my);
+  if(h){ dragging=h; offset.x=mx-h.x*scale; offset.y=my-h.y*scale; }
+});
+window.addEventListener('mouseup',()=>dragging=null);
+window.addEventListener('mousemove',e=>{
+  if(!dragging) return;
+  const r=canvas.getBoundingClientRect();
+  const mx=e.clientX-r.left,my=e.clientY-r.top;
+  dragging.x=Math.max(0,Math.min(area.w-dragging.w,(mx-offset.x)/scale));
+  dragging.y=Math.max(0,Math.min(area.d-dragging.d,(my-offset.y)/scale));
+  draw(); updateTable();
 });
 
-// ---------- Initialize ----------
-loadConfig();
+/* =========================
+   Table & controls
+========================= */
+function updateTable(){
+  const tbl=document.getElementById('tbl');
+  tbl.innerHTML='<tr><th>Item</th><th>X</th><th>Y</th><th>Status</th></tr>'+
+    items.map(it=>{
+      const r=nearest(it);
+      const ok=!r||distance(r.x,r.y,it.x+it.w/2,it.y+it.d/2)<=robotReachFt;
+      return `<tr><td>${it.name}</td><td>${it.x.toFixed(1)}</td><td>${it.y.toFixed(1)}</td>
+      <td style="color:${ok?'#10b981':'#ef4444'}">${ok?'OK':'Out of reach'}</td></tr>`;
+    }).join('');
+  document.getElementById('areaLbl').textContent=`${area.w}×${area.d} ft`;
+}
+
+function autoPlace(){
+  let ry=3;
+  items.filter(i=>i.type==='robot').forEach(r=>{ r.x=3; r.y=ry; ry+=4; });
+  let cy=2;
+  items.filter(i=>i.type==='cnc').forEach(c=>{ c.x=8; c.y=cy; cy+=4; });
+  draw(); updateTable(); toast('Auto-placed layout.');
+}
+
+function resetLayout(){
+  items.forEach(it=>{
+    it.x=Math.random()*(area.w-it.w);
+    it.y=Math.random()*(area.d-it.d);
+  });
+  draw(); updateTable();
+}
+
+function downloadLayout(){
+  const blob=new Blob([JSON.stringify({area,items},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='data/layout.json';
+  a.click();
+}
+
+/* =========================
+   Init
+========================= */
+draw(); updateTable();
+</script>
+
+</div>
+
+<footer>
+  © 2026 Diamond Precision Manufacturing (Saelens Corp) — Prototype generated by M365 Copilot.
+</footer>
+
+<div id="toast" class="toast"></div>
+<script>
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.style.display='block';
+  setTimeout(()=>t.style.display='none',3000);
+}
 </script>
 
 </body>
 </html>
-
