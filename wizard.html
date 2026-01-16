@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Cell Wizard — Diamond Precision Robot Cell</title>
+<title>Cell Configuration Assumptions — Diamond Precision Robot Cell</title>
 <link rel="stylesheet" href="styles.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -19,31 +19,23 @@
   </div>
   <nav>
     <a href="index.html">Overview</a>
-    <a href="wizard.html" class="active">Cell Wizard</a>
+    <a href="wizard.html" class="active">Cell Configuration Assumptions</a>
     <a href="layout.html">2D Layout</a>
     <a href="simulator.html">3D Simulator</a>
   </nav>
 </header>
 
 <div class="container">
-
-<h2>Cell Config Wizard</h2>
+<h2>Cell Configuration Assumptions</h2>
 <p>Enter or confirm assumptions. Click <strong>Save</strong> to persist configuration for Layout and Simulator.</p>
 
 <div class="grid">
 
-  <!-- 0) Cell Composition -->
-  <div class="card" style="grid-column: span 6;">
-    <h3>0) Cell Composition</h3>
-    <label>Number of Robots</label>
-    <input id="robot_count" type="number" min="1" max="4" value="1" />
-    <label>Number of CNC Machines</label>
-    <input id="cnc_count" type="number" min="1" max="10" value="1" />
-  </div>
-
   <!-- 1) Robot -->
   <div class="card" style="grid-column: span 6;">
     <h3>1) Robot</h3>
+    <label>Number of Robots</label>
+    <input id="robot_count" type="number" min="1" max="4" value="1" />
     <label>Brand / Model</label>
     <input id="robot_model" value="FANUC M-20iA" />
     <div class="flex">
@@ -63,6 +55,8 @@
   <!-- 2) CNC -->
   <div class="card" style="grid-column: span 6;">
     <h3>2) CNC Machine</h3>
+    <label>Number of CNC Machines</label>
+    <input id="cnc_count" type="number" min="1" max="10" value="1" />
     <label>Make / Model</label>
     <input id="cnc_model" value="HAAS VF-2" />
     <label>Interface</label>
@@ -83,58 +77,46 @@
     </div>
   </div>
 
-  <!-- 3) Vision -->
+  <!-- 3) Camera / Quality Inspection -->
   <div class="card" style="grid-column: span 6;">
-    <h3>3) Vision</h3>
+    <h3>3) Camera / Quality Inspection</h3>
     <label>Brand / Model</label>
-    <input id="vision_model" value="Cognex In-Sight 7000" />
+    <input id="camera_model" value="Cognex In-Sight 7000" />
     <label>Trigger</label>
-    <select id="vision_trig">
+    <select id="camera_trig">
       <option>Digital IO</option>
       <option>Ethernet/IP</option>
     </select>
   </div>
 
-  <!-- 4) Part & Takt -->
+  <!-- 4) Part -->
   <div class="card" style="grid-column: span 6;">
-    <h3>4) Part & Takt</h3>
+    <h3>4) Part Assumptions</h3>
     <div class="flex">
       <div class="col"><label>Length (mm)</label><input id="p_l" type="number" value="152"/></div>
       <div class="col"><label>Width (mm)</label><input id="p_w" type="number" value="152"/></div>
       <div class="col"><label>Height (mm)</label><input id="p_h" type="number" value="51"/></div>
-    </div>
-    <div class="flex">
       <div class="col"><label>Weight (kg)</label><input id="p_mass" type="number" value="2.3"/></div>
-      <div class="col"><label>Takt target (s)</label><input id="takt" type="number" value="90"/></div>
     </div>
+    <label>Cycle Time (s)</label>
+    <input id="takt" type="number" value="90" />
   </div>
 
-  <!-- 5) Floor -->
+  <!-- 5) Blower Station -->
   <div class="card" style="grid-column: span 6;">
-    <h3>5) Floor Constraints</h3>
+    <h3>5) Metal Shavings Blower Station</h3>
+    <label>Model / Type</label>
+    <input id="blower_model" value="Metal Shavings Blower X1" />
+  </div>
+
+  <!-- 6) Floor -->
+  <div class="card" style="grid-column: span 6;">
+    <h3>6) Floor Constraints</h3>
     <div class="flex">
       <div class="col"><label>Width (ft)</label><input id="area_w" type="number" value="12"/></div>
       <div class="col"><label>Depth (ft)</label><input id="area_d" type="number" value="16"/></div>
       <div class="col"><label>Clearance (ft)</label><input id="clearance" type="number" value="3"/></div>
     </div>
-  </div>
-
-  <!-- 6) Export -->
-  <div class="card" style="grid-column: span 6;">
-    <h3>6) Export Preference</h3>
-    <label>Robot Program Export</label>
-    <select id="export_pref">
-      <option>FANUC (.LS/.TP template)</option>
-      <option>ABB RAPID</option>
-      <option>KUKA KRL</option>
-      <option>URScript</option>
-      <option>RoboDK Project</option>
-    </select>
-    <label>Include IO Map</label>
-    <select id="iomap">
-      <option>Yes</option>
-      <option>No</option>
-    </select>
   </div>
 
 </div>
@@ -158,7 +140,31 @@ function saveConfig() {
   const cfg = {
     cell: {
       robot_count: +robot_count.value,
-      cnc_count: +cnc_count.value
+      cnc_count: +cnc_count.value,
+      extras: [
+        {
+          id:'blower',
+          type:'aux',
+          name:'Metal Shavings Blower',
+          model: blower_model.value,
+          w:2,
+          d:2,
+          x:0,
+          y:0,
+          color:'#fbbf24'
+        },
+        {
+          id:'camera',
+          type:'aux',
+          name:'Quality Inspection Camera',
+          model: camera_model.value,
+          w:2,
+          d:2,
+          x:0,
+          y:0,
+          color:'#8b5cf6'
+        }
+      ]
     },
     robot: {
       model: robot_model.value,
@@ -172,10 +178,6 @@ function saveConfig() {
       door_w_mm: +door_w.value,
       door_h_mm: +door_h.value
     },
-    vision: {
-      model: vision_model.value,
-      trigger: vision_trig.value
-    },
     part: {
       L_mm: +p_l.value,
       W_mm: +p_w.value,
@@ -187,17 +189,11 @@ function saveConfig() {
       width_ft: +area_w.value,
       depth_ft: +area_d.value,
       clearance_ft: +clearance.value
-    },
-    export: {
-      preference: export_pref.value,
-      io_map: iomap.value === 'Yes'
     }
   };
 
-  // Persist for app use
   localStorage.setItem('cellConfig', JSON.stringify(cfg));
 
-  // Download JSON (existing behavior)
   const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -217,3 +213,4 @@ function toast(msg) {
 
 </body>
 </html>
+
