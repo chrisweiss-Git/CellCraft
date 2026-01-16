@@ -1,4 +1,21 @@
-cd "C:\Users\Chris.Weiss\OneDrive\Project Veteran\AI\diamond-robot-cell-prototype"
-git add .github/workflows/deploy.yml
-git commit -m "Add GitHub Actions deploy workflow
-git push
+name: Deploy Simulator
+
+on:
+  push:
+    branches:
+      - main  # Trigger workflow when code is pushed to main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Run simulator update commands
+        run: |
+          # Navigate to your project directory (Linux path style)
+          cd "$GITHUB_WORKSPACE"
+          # Optional: run any commands you need
+          echo "This is where you would run your simulator commands"
