@@ -26,7 +26,6 @@
 </header>
 
 <div class="container">
-
 <h2>2D Layout Planner</h2>
 <p>Drag items to arrange within the cell area. Robot reach rings are shown; items beyond reach turn red.</p>
 
@@ -59,8 +58,19 @@
    Load configuration
 ========================= */
 const cfg = JSON.parse(localStorage.getItem('cellConfig')) || {};
+
+// Robot & CNC counts
 const robotCount = Math.min(4, Math.max(1, cfg.cell?.robot_count || 1));
 const cncCount   = Math.min(10, Math.max(1, cfg.cell?.cnc_count || 1));
+
+// Floor dimensions
+const area = {
+  w: cfg.floor?.width_ft || 12,
+  d: cfg.floor?.depth_ft || 16
+};
+
+// Robot reach in ft
+const robotReachFt = (cfg.robot?.reach_mm || 1811) / 304.8; // mm → ft
 
 /* =========================
    Canvas setup
@@ -68,14 +78,7 @@ const cncCount   = Math.min(10, Math.max(1, cfg.cell?.cnc_count || 1));
 const canvas = document.getElementById('layout');
 const ctx = canvas.getContext('2d');
 const W = canvas.width, H = canvas.height;
-const scale = 30; // px per ft
-
-const area = {
-  w: cfg.floor?.width_ft || 12,
-  d: cfg.floor?.depth_ft || 16
-};
-
-const robotReachFt = 6.0; // prototype reach ring
+const scale = Math.min(W / area.w, H / area.d); // px per ft
 
 /* =========================
    Build dynamic items
@@ -87,12 +90,11 @@ for (let i = 0; i < robotCount; i++) {
   items.push({
     id: `robot${i}`,
     type: 'robot',
-    name: `Robot ${i + 1}`,
+    name: `Robot ${i+1}`,
     w: 3,
     d: 3,
-    x: 2,
-    y: 3 + i * 4,
-    color: '#22d3ee'
+    x:0, y:0,
+    color:'#22d3ee'
   });
 }
 
@@ -101,32 +103,78 @@ for (let i = 0; i < cncCount; i++) {
   items.push({
     id: `cnc${i}`,
     type: 'cnc',
-    name: `CNC ${i + 1}`,
+    name: `CNC ${i+1}`,
     w: 6,
     d: 4,
-    x: 8,
-    y: 2 + i * 4,
-    color: '#60a5fa'
+    x:0, y:0,
+    color:'#60a5fa'
   });
 }
 
 // Fixed peripherals
 items.push(
-  { id:'pallet', type:'aux', name:'Finished Pallet', w:2, d:2, x:3, y:area.d-3, color:'#10b981' },
-  { id:'infeed', type:'aux', name:'Raw Infeed', w:2, d:2, x:1, y:area.d-3, color:'#a78bfa' },
-  { id:'scrap',  type:'aux', name:'Scrap Bin', w:2, d:2, x:area.w-3, y:area.d-3, color:'#ef4444' }
+  { id:'pallet', type:'aux', name:'Finished Pallet', w:2, d:2, x:0, y:0, color:'#10b981' },
+  { id:'infeed', type:'aux', name:'Raw Infeed', w:2, d:2, x:0, y:0, color:'#a78bfa' },
+  { id:'scrap',  type:'aux', name:'Scrap Bin', w:2, d:2, x:0, y:0, color:'#ef4444' }
 );
 
+// Extras from wizard
+if(cfg.cell?.extras){
+  cfg.cell.extras.forEach(e=>{
+    items.push({
+      id: e.id,
+      type: e.type || 'aux',
+      name: e.name,
+      w: e.w || 2,
+      d: e.d || 2,
+      x:0, y:0,
+      color: e.color || '#facc15'
+    });
+  });
+}
+
 /* =========================
-   Interaction state
+   Auto-place items efficiently
 ========================= */
-let dragging = null;
-let offset = { x:0, y:0 };
+function autoPlace(){
+  // Place robots along one side
+  let ry = 1;
+  items.filter(i=>i.type==='robot').forEach(r=>{
+    r.x = 1;
+    r.y = ry;
+    ry += r.d + 1;
+  });
+
+  // Place CNCs opposite robots
+  let cy = 1;
+  items.filter(i=>i.type==='cnc').forEach(c=>{
+    c.x = area.w - c.w - 1;
+    c.y = cy;
+    cy += c.d + 1;
+  });
+
+  // Place fixed peripherals at bottom
+  const auxItems = items.filter(i=>i.type==='aux' && !['blower','camera'].includes(i.id));
+  let ax = 1;
+  auxItems.forEach(a=>{
+    a.x = ax;
+    a.y = area.d - a.d - 1;
+    ax += a.w + 1;
+  });
+
+  // Place extras (blower, camera) in remaining corners
+  items.filter(i=>['blower','camera'].includes(i.id)).forEach((e,i)=>{
+    e.x = i===0 ? area.w - e.w -1 : 1;
+    e.y = 1;
+  });
+
+  draw(); updateTable(); toast('Auto-placed layout.');
+}
 
 /* =========================
    Rendering
 ========================= */
-function draw() {
+function draw(){
   ctx.clearRect(0,0,W,H);
 
   // Background
@@ -157,19 +205,22 @@ function draw() {
   // Items
   items.forEach(it=>{
     const nearestRobot = nearest(it);
-    const within = !nearestRobot || distance(nearestRobot.x,nearestRobot.y,it.x+it.w/2,it.y+it.d/2) <= robotReachFt;
+    const within = !nearestRobot || distance(nearestRobot.x,nearestRobot.y,it.x+it.w/2,it.y+it.d/2)<=robotReachFt;
 
     ctx.fillStyle = it.color + (within ? '' : 'aa');
-    ctx.fillRect(it.x*scale, it.y*scale, it.w*scale, it.d*scale);
+    ctx.fillRect(it.x*scale,it.y*scale,it.w*scale,it.d*scale);
     ctx.strokeStyle = within ? '#94a3b8' : '#ef4444';
-    ctx.strokeRect(it.x*scale, it.y*scale, it.w*scale, it.d*scale);
+    ctx.strokeRect(it.x*scale,it.y*scale,it.w*scale,it.d*scale);
 
     ctx.fillStyle = '#e5e7eb';
     ctx.font = '12px Inter';
-    ctx.fillText(it.name, it.x*scale+6, it.y*scale+14);
+    ctx.fillText(it.name,it.x*scale+6,it.y*scale+14);
   });
 }
 
+/* =========================
+   Utility functions
+========================= */
 function nearest(it){
   if(it.type==='robot') return null;
   let best=null, bestD=1e9;
@@ -179,21 +230,12 @@ function nearest(it){
   });
   return best;
 }
-
-function distance(ax,ay,bx,by){ return Math.hypot(ax-bx, ay-by); }
+function distance(ax,ay,bx,by){ return Math.hypot(ax-bx,ay-bx,bx-by,by-ax); }
 
 /* =========================
    Mouse interaction
 ========================= */
-function hit(mx,my){
-  for(let i=items.length-1;i>=0;i--){
-    const it=items[i];
-    const x=it.x*scale,y=it.y*scale,w=it.w*scale,d=it.d*scale;
-    if(mx>=x&&mx<=x+w&&my>=y&&my<=y+d) return it;
-  }
-  return null;
-}
-
+let dragging=null, offset={x:0,y:0};
 canvas.addEventListener('mousedown',e=>{
   const r=canvas.getBoundingClientRect();
   const mx=e.clientX-r.left,my=e.clientY-r.top;
@@ -209,6 +251,13 @@ window.addEventListener('mousemove',e=>{
   dragging.y=Math.max(0,Math.min(area.d-dragging.d,(my-offset.y)/scale));
   draw(); updateTable();
 });
+function hit(mx,my){
+  for(let i=items.length-1;i>=0;i--){
+    const it=items[i],x=it.x*scale,y=it.y*scale,w=it.w*scale,d=it.d*scale;
+    if(mx>=x&&mx<=x+w&&my>=y&&my<=y+d) return it;
+  }
+  return null;
+}
 
 /* =========================
    Table & controls
@@ -223,14 +272,6 @@ function updateTable(){
       <td style="color:${ok?'#10b981':'#ef4444'}">${ok?'OK':'Out of reach'}</td></tr>`;
     }).join('');
   document.getElementById('areaLbl').textContent=`${area.w}×${area.d} ft`;
-}
-
-function autoPlace(){
-  let ry=3;
-  items.filter(i=>i.type==='robot').forEach(r=>{ r.x=3; r.y=ry; ry+=4; });
-  let cy=2;
-  items.filter(i=>i.type==='cnc').forEach(c=>{ c.x=8; c.y=cy; cy+=4; });
-  draw(); updateTable(); toast('Auto-placed layout.');
 }
 
 function resetLayout(){
@@ -254,8 +295,6 @@ function downloadLayout(){
 ========================= */
 draw(); updateTable();
 </script>
-
-</div>
 
 <footer>
   © 2026 Diamond Precision Manufacturing (Saelens Corp) — Prototype generated by M365 Copilot.
